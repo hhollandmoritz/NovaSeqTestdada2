@@ -32,6 +32,8 @@ install.packages("plotly")
 
 library(dada2); packageVersion("dada2") # the dada2 pipeline
 library(ShortRead); packageVersion("ShortRead") # dada2 depends on this
+library(parallel); packageVersion("parallel") # to make the NovaSeq conversion faster using parallel lapply()
+library(pbmcapply); packageVersion("pbmcapply") # to report progress in parallel
 library(dplyr); packageVersion("dplyr") # for manipulating data
 library(tidyr); packageVersion("tidyr") # for creating the final graph at the end of the pipeline
 library(Hmisc); packageVersion("Hmisc") # for creating the final graph at the end of the pipeline
@@ -77,7 +79,7 @@ table.fp <- file.path(project.fp, "03_tabletax")
 #' In NovaSeq phred scores are "binned" into 4 options. According to (this)[https://www.illumina.com/content/dam/illumina-marketing/documents/products/appnotes/novaseq-hiseq-q30-app-note-770-2017-010.pdf] guide from Illumina, quality scores >30 are assigned 37, scores <15 are assigned 12, and scores between 15 and 30 are assigned a quality of 23. Any bases that cannot be called are assigned a score of 2. I have created a table of lookup codes for these conversions. The conversions don't include converting unassigned from 2s since the dada2 pipeline filters those out anyway. 
 
 #' First we'll create a function to convert each line of scores to NovaSeq scores
-
+#+ NovaSeq Conversion1, eval = FALSE, include=TRUE
 # Read in the score translation table
 QscoreTranslate <- read.csv("IlluminaQualityScores.csv", as.is = TRUE) # this table comes from Illumina's website, the last two columns have been added by me
 head(QscoreTranslate)
@@ -93,7 +95,9 @@ fastq_qual_change <- function(qualinstance) {
   return(qualstr)
 }
 
+  
 #' Now read in the quality scores and convert them (depending on file size, this may take some time)
+#+ NovaSeq Conversion1, eval = FALSE, include=TRUE
 R1 <- readFastq(R1.fp)
 R2 <- readFastq(R2.fp)
 I1 <- readFastq(I1.fp)
@@ -101,25 +105,38 @@ R1
 R2
 I1
 
-# Convert R1
-R1qual.list <- lapply(as.list(R1@quality@quality), fastq_qual_change) # for every sequence in list, apply fastq_qual_change function
+# Coerce the BioStrings to lists and then convert them with our function from above. This takes a long time, but with my R skills, it can't be helped.
+R1.list <- as.list(R1@quality@quality[c(1:length(R1@quality@quality))])
+R2.list <- as.list(R2@quality@quality[c(1:length(R2@quality@quality))])
+I1.list <- as.list(I1@quality@quality[c(1:length(I1@quality@quality))])
+
+# Convert R1 (this will take a long time)
+R1qual.list <- pbmclapply(R1.list, fastq_qual_change, # we use mclapply here to speed things up
+                      mc.cores = detectCores()) # for every sequence in list, apply fastq_qual_change function
 R1qual.Bstrset <- BStringSet(R1qual.list) # Convert the outputted list to a BStringSet format
 R1@quality@quality <- R1qual_change.test # overwrite the original quality scores with NovaSeq qualities
 
-# Convert R2
-R2qual.list <- lapply(as.list(R2@quality@quality), fastq_qual_change) # for every sequence in list, apply fastq_qual_change function
+# Convert R2 (this will take a long time)
+R2qual.list <- mclapply(I1.list, fastq_qual_change, # we use mclapply here to speed things up
+                      mc.cores = detectCores()) # for every sequence in list, apply fastq_qual_change function
 R2qual.Bstrset <- BStringSet(R2qual.list) # Convert the outputted list to a BStringSet format
 R2@quality@quality <- R2qual_change.test # overwrite the original quality scores with NovaSeq qualities
 
-# Convert I1
-I1qual.list <- lapply(as.list(I1@quality@quality), fastq_qual_change) # for every sequence in list, apply fastq_qual_change function
+# Convert I1  (this will take a long time)
+I1qual.list <- mclapply(I1.list, fastq_qual_change, # we use mclapply here to speed things up
+                      mc.cores = detectCores()) # for every sequence in list, apply fastq_qual_change function
 I1qual.Bstrset <- BStringSet(I1qual.list) # Convert the outputted list to a BStringSet format
 I1@quality@quality <- I1qual_change.test # overwrite the original quality scores with NovaSeq qualities
-
+  
 # Check conversion happened
 quality(R1)
 quality(R2)
 quality(I1)
+
+# Save RDS files
+saveRDS(R1, paste0(novaseqreads.fp, "/R1_convert.rds"))
+saveRDS(R2, paste0(novaseqreads.fp, "/R2_convert.rds"))
+saveRDS(I1, paste0(novaseqreads.fp, "/I1_convert.rds"))
 
 
 # Write converted files
