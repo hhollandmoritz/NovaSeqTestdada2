@@ -1,11 +1,11 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 __author__ = "Hannah Holland-Moritz"
 __email__ = "hannah.hollandmoritz@colorado.edu"
 __version__ = "0.0.1"
 
 """
-Rewrite silva taxonomy fasta file to be complient with USEARCH sinTAX command.
+Change MiSeq fastq files to match NovaSeq files
 This program depends on biopython; to install use 
 
 pip install biopython
@@ -39,8 +39,7 @@ def main():
     req.add_argument('-i', '--input_fp', required=True, type=str,
                      help=
      '''
-     The input fasta file from SILVA, the expected header format is
-     >SILVA_SAMPLE_ACCESSION_ID TAXONOMY;FIELDS;SEPARATED;BY;SEMICOLONS.
+     The input fastq file. 
      ''')
 
     req.add_argument('-o', '--output_fp',
@@ -50,14 +49,6 @@ def main():
      The output file path.
      ''')
 
-    req.add_argument('-t', '--taxonomy_map_fp',
-                     required=True, type=str,
-                     help=
-     '''
-     The silva taxonomy map file path. This is the file named with the format
-     tax_slv_(ls)su_VERSION.map
-     ''')
-
     opt.add_argument('-l', '--length', type=int,
                      help=
      '''
@@ -65,9 +56,9 @@ def main():
      is not required but may speed up processing for long files
      if it is included. If you choose to use this argument,
      ***PLEASE MAKE SURE IT IS CORRECT***, otherwise, the program
-     will take the time to read through your entire fasta file first
+     will take the time to read through your entire fastq file first
      before failing which will be a very sad day for you if your 
-     fasta file is massive.
+     fastq file is massive.
      ''')
 
     # Now the actual code
@@ -78,10 +69,9 @@ def main():
 
     input_fp = args.input_fp
     output_fp = args.output_fp
-    map_fp = args.taxonomy_map_fp
     length = args.length
 
-    # create a variable to hold modified sequences
+    # create a variable of correct length (if known) to hold modified sequences
     if length is not None:
         mod_records = [None] * length
         i = 0
@@ -94,7 +84,7 @@ def main():
 
     print("Modifying sequence headers...")
 
-    # read through the fasta file, for every record run the modify_fasta_header function
+    # read through the fastq file, for every record run the modify_fasta_header function
     for record in SeqIO.parse(input_fp, "fasta"):
         # extract header from record
         header=record.description
@@ -140,55 +130,65 @@ def main():
 # Helper functions #
 
 
-def create_taxonomy_dictionary(tax_map_fp):
+def create_quality_dictionary():
     """
-    create_taxonomy_dictionary(tax_map_fp)
-    this function takes the tax.map file from silva
-    and creates a dictionary from it where the keys
-    are taxonomy levels and the values are the taxonomy
-    numbers (i.e. 10000 for domain, 98 for genera, other numbers in between).
-    The taxonomy levels that have numbers > 10000 or are labelled
-    with a 1 or a 0 are for the most part eukaryotic kingdoms/domains
-    for example, Fungi and Metazoa are 1, Opisthokonts and SAR are 10001
-    Monilophytes (ferns) and Bilatarians (animals with bilateran symmetry)
-    are 0. If the taxonomy level doesn't conform to the 7-level system,
-    the value is "non-conforming". The function returns a dictionary
-    with the taxonomy name as the key and the sinTax abbreviation as the value.
+    create_quality_dictionary()
+    this function creates a dictionary of quality scores where the keys
+    are traditional illumna fastq quality symbols and the values are the 
+    new NovaSeq quality equivalents. According to illumina 
+    (https://www.illumina.com/content/dam/illumina-marketing/documents/products/appnotes/novaseq-hiseq-q30-app-note-770-2017-010.pdf),
+    quality scores <15 are assigned 12 ('-'), scores between 15 and 30 
+    (inclusive) are assigned 23 ('8'), and scores >30 are assigned 37 ('F'). 
+    Any null scores (i.e. base calls of N) are assigned 2 ('"'). As our pipeline
+    currently filters out Ns before processing, I do not bother assining 2 to
+    no-calls.
     """
-    tax_map_handle = open(tax_map_fp, "r")
 
     # initialize dictionary
-    tax_dict = {}
+    qual_dict = {"!" : "-",
+                "\"" : "-",
+                "#" : "-",
+                "$" : "-",
+                "%" : "-",
+                "&" : "-",
+                "'" : "-",
+                "(" : "-",
+                ")" : "-",
+                "*" : "-",
+                "+" : "-",
+                "," : "-",
+                "-" : "-",
+                "." : "-",
+                "/" : "-",
+                "0" : "8",
+                "1" : "8",
+                "2" : "8",
+                "3" : "8",
+                "4" : "8",
+                "5" : "8",
+                "6" : "8",
+                "7" : "8",
+                "8" : "8",
+                "9" : "8",
+                ":" : "8",
+                ";" : "8",
+                "<" : "8",
+                "=" : "8",
+                ">" : "8",
+                "?" : "8",
+                "@" : "F",
+                "A" : "F",
+                "B" : "F",
+                "C" : "F",
+                "D" : "F",
+                "E" : "F",
+                "F" : "F",
+                "G" : "F",
+                "H" : "F",
+                "I" : "F"
+                }
 
-    # read the lines, split the lines
-    for line in tax_map_handle:
-        line = line.strip()
-        sep_line = line.split("\t")
-        taxonomy_name = sep_line[1]
-        taxonomy_number = sep_line[3]
-        # Translate the taxonomy numbers into a 6-level system
-        if taxonomy_number == "98":
-            tax_abr = "g:"
-        elif taxonomy_number == "5":
-            tax_abr = "f:"
-        elif taxonomy_number == "4":
-            tax_abr = "o:"
-        elif taxonomy_number == "3":
-            tax_abr = "c:"
-        elif taxonomy_number == "2":
-            tax_abr = "p:"
-        elif taxonomy_number == "10000":
-            tax_abr = "d:"
-        # the taxonomy levels that have numbers > 10000 or are labelled
-        # with a 1 or a 0 are for the most part eukaryotic kingdoms/domains
-        # for example, Fungi and Metazoa are 1, Opisthokonts and SAR are 10001
-        # Monilophytes (ferns) and Bilatarians (animals with bilateran symmetry)
-        # are 0.
-        else:
-            tax_abr = "non-conforming:"
-        tax_dict[taxonomy_name] = tax_abr
-
-    return tax_dict
+    return qual_dict
 
 
 def multiple_replace(text, adict):
