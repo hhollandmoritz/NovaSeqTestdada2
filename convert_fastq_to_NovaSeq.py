@@ -39,7 +39,7 @@ def main():
     req.add_argument('-i', '--input_fp', required=True, type=str,
                      help=
      '''
-     The input fastq file. 
+     The input fastq file. The file may be either gzipped or uncompressed.
      ''')
 
     req.add_argument('-o', '--output_fp',
