@@ -111,6 +111,8 @@ def main():
         else:
             mod_records[i] = record
             i += 1
+            if (100 * i/float(length)) % 10 == 0:
+                print str(100 * i/float(length)) + "% done"
         # print(mod_records) # debugging
 
     # If the input length doesn't match the actual number of sequences

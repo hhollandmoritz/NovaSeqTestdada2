@@ -6,3 +6,5 @@
 00_createNovaSeq/NovaSeq_Undetermined_S0_L001_R1_001.fastq.gz
 00_createNovaSeq/NovaSeq_Undetermined_S0_L001_R2_001.fastq.gz
 convert_fastq_to_NovaSeq.py~
+test.fastq.gz
+test_out.fastq.gz
